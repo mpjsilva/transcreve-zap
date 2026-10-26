@@ -3,7 +3,13 @@
 Se a pessoa pediu para **instalar** o Transcreve Zap, siga exatamente estes passos.
 Não improvise outra forma de instalar e não altere o código.
 
-1. Confira que é Windows 10 ou 11, 64 bits. Em outro sistema, avise que só Windows é suportado e pare.
+1. Confira o sistema. Em **Fedora ou derivada** (tem `dnf`), rode `./instalar.sh`
+   (mesmas opções: `--resumo-local`, `--modelo-melhor`, `--sem-resumo`), em segundo
+   plano, uma vez só. Se faltarem pacotes e não houver terminal, ele para com
+   `ERRO:` e o comando `sudo dnf install ...`: peça à pessoa para rodá-lo
+   (`! sudo dnf install ...`) e rode o instalador de novo. Acompanhe
+   `dados/instalacao.txt` como abaixo; reinicie com `./parar.sh` e `./iniciar.sh`.
+   Em Windows 10/11 64 bits, siga os passos abaixo. Em outro sistema, avise e pare.
 2. Na pasta deste repositório, rode o instalador **uma vez só**, em segundo plano:
 
    ```powershell

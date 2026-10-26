@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process'
 import ffmpeg from 'ffmpeg-static'
 import { PASTA_TEMP, PASTA_MODELOS, WHISPER_EXE } from './config.js'
 
-// Roda com prioridade baixa: o Windows dá preferência ao que a pessoa estiver usando.
+// Roda com prioridade baixa: o sistema dá preferência ao que a pessoa estiver usando.
 export function prioridadeBaixa (pid) {
   try { os.setPriority(pid, os.constants.priority.PRIORITY_BELOW_NORMAL) } catch {}
 }

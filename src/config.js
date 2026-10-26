@@ -12,8 +12,13 @@ export const ARQ_LOG = path.join(DADOS, 'transcreve-zap.log')
 export const ARQ_CONFIG = path.join(RAIZ, 'config.json')
 export const ARQ_ID_INSTALACAO = path.join(DADOS, 'id-instalacao.txt')
 
-export const WHISPER_EXE = path.join(RAIZ, 'ferramentas', 'whisper', 'whisper-cli.exe')
-export const LLAMA_EXE = path.join(RAIZ, 'ferramentas', 'llama', 'llama-server.exe')
+// No Windows os executáveis vêm prontos em ferramentas\. No Linux (Fedora) o
+// whisper-cli é compilado pelo instalar.sh e o llama-server vem do pacote
+// llama-cpp do sistema, a não ser que exista um em ferramentas/llama.
+const EXT = process.platform === 'win32' ? '.exe' : ''
+export const WHISPER_EXE = path.join(RAIZ, 'ferramentas', 'whisper', 'whisper-cli' + EXT)
+const LLAMA_LOCAL = path.join(RAIZ, 'ferramentas', 'llama', 'llama-server' + EXT)
+export const LLAMA_EXE = process.platform === 'win32' || fs.existsSync(LLAMA_LOCAL) ? LLAMA_LOCAL : 'llama-server'
 export const PASTA_MODELOS = path.join(RAIZ, 'modelos')
 
 const PADRAO = {
