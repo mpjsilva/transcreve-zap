@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Instalador do Transcreve Zap para Fedora e derivadas (RHEL, Rocky, Alma, Nobara, Bazzite...).
-# Pacotes do sistema vêm do dnf; o resto fica dentro desta pasta.
+# Instalador do Transcreve Zap para Linux: Fedora e derivadas (dnf) e
+# Ubuntu/Debian e derivadas (apt: Mint, Pop!_OS, Zorin, elementary...).
+# Pacotes do sistema vêm do gerenciador da distro; o resto fica dentro desta pasta.
 # Uso: ./instalar.sh [--resumo-local] [--sem-resumo] [--modelo-melhor] [--nao-iniciar]
 set -euo pipefail
 
@@ -46,6 +47,11 @@ SMALL_URL="$HF/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
 SMALL_SHA='1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b'
 TURBO_URL="$HF/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
 TURBO_SHA='394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2'
+NODE_VER='v24.22.1'
+NODE_SHA_x64='6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6'
+NODE_SHA_arm64='dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e'
+LLAMA_REPO='https://github.com/ggml-org/llama.cpp'
+LLAMA_TAG='b6153'; LLAMA_COMMIT='3ea913f1ce9567289aedd866a569dbab8fb8e419'
 QWEN_ARQ='qwen2.5-3b-instruct-q4_k_m.gguf'
 QWEN_URL="$HF/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/$QWEN_ARQ"
 QWEN_SHA='626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d'
@@ -69,7 +75,10 @@ baixar() { # url sha destino
 
 passo 'Conferindo o computador'
 [[ "$(uname -m)" == "x86_64" || "$(uname -m)" == "aarch64" ]] || falhar 'O Transcreve Zap precisa de um sistema de 64 bits.'
-command -v dnf >/dev/null || falhar 'Este instalador é para Fedora e derivadas (precisa do dnf).'
+if command -v dnf >/dev/null; then GERENCIADOR=dnf
+elif command -v apt-get >/dev/null; then GERENCIADOR=apt
+else falhar 'Este instalador é para Fedora (dnf) ou Ubuntu/Debian (apt) e derivadas.'; fi
+echo "    gerenciador de pacotes: $GERENCIADOR"
 ram_gb=$(( $(awk '/MemTotal/{print $2}' /proc/meminfo) / 1024 / 1024 ))
 livre_gb=$(( $(df -Pk "$RAIZ" | awk 'NR==2{print $4}') / 1024 / 1024 ))
 echo "    memória: $ram_gb GB | espaço livre: $livre_gb GB"
@@ -81,21 +90,50 @@ if [[ $RESUMO_LOCAL == 1 && $ram_gb -lt 7 ]]; then  # 8 GB aparecem como 7 em Me
 fi
 [[ $SEM_RESUMO == 1 ]] && RESUMO_LOCAL=0
 
-passo 'Pacotes do sistema (dnf)'
-pacotes=(nodejs npm git gcc-c++ cmake make curl)
-[[ $RESUMO_LOCAL == 1 ]] && pacotes+=(llama-cpp)
+passo "Pacotes do sistema ($GERENCIADOR)"
 faltando=()
-for p in "${pacotes[@]}"; do rpm -q --whatprovides "$p" >/dev/null 2>&1 || faltando+=("$p"); done
+if [[ $GERENCIADOR == dnf ]]; then
+  pacotes=(nodejs npm git gcc-c++ cmake make curl)
+  [[ $RESUMO_LOCAL == 1 ]] && pacotes+=(llama-cpp)
+  for p in "${pacotes[@]}"; do rpm -q --whatprovides "$p" >/dev/null 2>&1 || faltando+=("$p"); done
+  instalar_cmd="sudo dnf install -y"
+else
+  # Node.js do Ubuntu costuma ser velho demais; se for, baixa um portátil abaixo.
+  pacotes=(git build-essential cmake curl ca-certificates xz-utils)
+  for p in "${pacotes[@]}"; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'ok installed' || faltando+=("$p"); done
+  instalar_cmd="sudo apt-get install -y"
+fi
 if (( ${#faltando[@]} )); then
   echo "    faltando: ${faltando[*]}"
-  if [[ -t 0 ]] && command -v sudo >/dev/null; then
-    sudo dnf install -y "${faltando[@]}" || falhar "Falha ao instalar: ${faltando[*]}"
+  if [[ $(id -u) == 0 ]]; then
+    [[ $GERENCIADOR == apt ]] && apt-get update -q
+    ${instalar_cmd#sudo } "${faltando[@]}" || falhar "Falha ao instalar: ${faltando[*]}"
+  elif [[ -t 0 ]] && command -v sudo >/dev/null; then
+    [[ $GERENCIADOR == apt ]] && sudo apt-get update -q
+    $instalar_cmd "${faltando[@]}" || falhar "Falha ao instalar: ${faltando[*]}"
   else
-    falhar "Instale antes e rode de novo: sudo dnf install -y ${faltando[*]}"
+    falhar "Instale antes e rode de novo: $instalar_cmd ${faltando[*]}"
   fi
 fi
-node_maior=$(node -p 'process.versions.node.split(".")[0]')
-(( node_maior >= 20 )) || falhar "Precisa do Node.js 20 ou mais novo (tem $(node -v))."
+
+passo 'Node.js'
+node_maior=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+if (( node_maior >= 20 )); then
+  echo "    do sistema: $(node -v)"
+else
+  # Portátil, só para este programa (como no Windows).
+  case "$(uname -m)" in x86_64) narq=x64; nsha=$NODE_SHA_x64 ;; *) narq=arm64; nsha=$NODE_SHA_arm64 ;; esac
+  NODE_DIR="$RAIZ/ferramentas/node"
+  if [[ ! -x "$NODE_DIR/bin/node" ]]; then
+    mkdir -p "$RAIZ/ferramentas"
+    baixar "https://nodejs.org/dist/$NODE_VER/node-$NODE_VER-linux-$narq.tar.xz" "$nsha" "$RAIZ/ferramentas/node.tar.xz"
+    rm -rf "$NODE_DIR"; mkdir -p "$NODE_DIR"
+    tar -xJf "$RAIZ/ferramentas/node.tar.xz" -C "$NODE_DIR" --strip-components=1
+    rm -f "$RAIZ/ferramentas/node.tar.xz"
+  fi
+  export PATH="$NODE_DIR/bin:$PATH"
+  echo "    portátil: $(node -v) em $NODE_DIR"
+fi
 
 passo 'Bibliotecas do programa'
 "$RAIZ/parar.sh" >/dev/null 2>&1 || true
@@ -126,13 +164,33 @@ baixar "$MW_URL" "$MW_SHA" "$MODELOS/$MW_ARQ"
 
 if [[ $RESUMO_LOCAL == 1 ]]; then
   passo 'Modelo de resumo (local, ~2 GB)'
-  command -v llama-server >/dev/null || falhar 'llama-server não encontrado (pacote llama-cpp).'
+  LLAMA_BIN="$RAIZ/ferramentas/llama/llama-server"
+  if command -v llama-server >/dev/null || [[ -x "$LLAMA_BIN" ]]; then
+    echo "    llama-server: $(command -v llama-server || echo "$LLAMA_BIN")"
+  else
+    # Ubuntu/Debian não empacotam o llama.cpp: compila num commit fixo.
+    fonte="$RAIZ/ferramentas/llama-src"
+    rm -rf "$fonte"
+    git -c advice.detachedHead=false clone -q --depth 1 --branch "$LLAMA_TAG" "$LLAMA_REPO" "$fonte"
+    [[ "$(git -C "$fonte" rev-parse HEAD)" == "$LLAMA_COMMIT" ]] || falhar "O código do llama.cpp não confere com o commit esperado."
+    cmake -S "$fonte" -B "$fonte/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+      -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF
+    cmake --build "$fonte/build" --target llama-server -j "$(nproc)"
+    mkdir -p "$(dirname "$LLAMA_BIN")"
+    cp "$fonte/build/bin/llama-server" "$LLAMA_BIN"
+    rm -rf "$fonte"
+  fi
   baixar "$QWEN_URL" "$QWEN_SHA" "$MODELOS/$QWEN_ARQ"
 fi
 
 passo 'Configuração'
 # Mesma lógica do instalar.ps1: mescla com o exemplo e decide onde resumir.
-RESUMO_LOCAL=$RESUMO_LOCAL SEM_RESUMO=$SEM_RESUMO MW_ARQ=$MW_ARQ QWEN_ARQ=$QWEN_ARQ node --input-type=module -e '
+RESUMO_LOCAL=$RESUMO_LOCAL SEM_RESUMO=$SEM_RESUMO MW_ARQ=$MW_ARQ NODE_VER='v24.22.1'
+NODE_SHA_x64='6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6'
+NODE_SHA_arm64='dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e'
+LLAMA_REPO='https://github.com/ggml-org/llama.cpp'
+LLAMA_TAG='b6153'; LLAMA_COMMIT='3ea913f1ce9567289aedd866a569dbab8fb8e419'
+QWEN_ARQ=$QWEN_ARQ node --input-type=module -e '
 import fs from "node:fs"
 const e = process.env
 const exemplo = JSON.parse(fs.readFileSync("config.exemplo.json", "utf8").replace(/^﻿/, ""))
@@ -168,10 +226,15 @@ Nice=10
 [Install]
 WantedBy=default.target
 UNIT
-systemctl --user daemon-reload
-systemctl --user enable transcreve-zap.service >/dev/null
-echo "    $UNIDADE"
-echo "    (para rodar mesmo sem login: sudo loginctl enable-linger $USER)"
+SYSTEMD=0
+if systemctl --user daemon-reload 2>/dev/null; then
+  SYSTEMD=1
+  systemctl --user enable transcreve-zap.service >/dev/null
+  echo "    $UNIDADE"
+  echo "    (para rodar mesmo sem login: sudo loginctl enable-linger $USER)"
+else
+  echo '    systemd do usuário indisponível (container/WSL?): inicie com ./iniciar.sh'
+fi
 
 painel="http://localhost:$PORTA"
 if [[ $NAO_INICIAR == 1 ]]; then
@@ -181,7 +244,8 @@ if [[ $NAO_INICIAR == 1 ]]; then
 fi
 
 passo 'Abrindo o programa'
-systemctl --user restart transcreve-zap.service
+if [[ $SYSTEMD == 1 ]]; then systemctl --user restart transcreve-zap.service
+else "$RAIZ/iniciar.sh"; fi
 estado=''
 for _ in $(seq 60); do
   sleep 1

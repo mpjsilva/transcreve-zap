@@ -21,7 +21,7 @@ Ana avisa que a reunião de sexta passou para as 15h e pede que você leve o con
 
 ## Requisitos
 
-- Windows 10 ou 11, 64 bits, ou Fedora/derivadas 64 bits (veja abaixo)
+- Windows 10 ou 11, 64 bits, ou Linux 64 bits: Fedora, Ubuntu e derivadas (veja abaixo)
 - 2 GB livres no disco (5 GB com `-ResumoLocal`)
 - 8 GB de memória só se for resumir no próprio PC (`-ResumoLocal`)
 - O computador ligado: os áudios são transcritos enquanto ele está ligado
@@ -50,24 +50,30 @@ administrador. Cada download tem o SHA-256 conferido.
 Para resumir no próprio PC, sem mandar texto para o servidor, instale com
 `instalar.cmd -ResumoLocal`: baixa mais uns 2 GB e precisa de 8 GB de memória.
 
-## Fedora e derivadas (Linux)
+## Linux: Fedora, Ubuntu e derivadas
 
-Funciona em Fedora 40+ e derivadas com `dnf` (Nobara, Ultramarine, RHEL/Rocky/Alma
-com EPEL, Fedora Atomic via toolbox).
+Um só instalador para as duas famílias:
+
+- **Fedora 40+** e derivadas com `dnf` (Nobara, Ultramarine, RHEL/Rocky/Alma).
+- **Ubuntu 22.04+ / Debian 12+** e derivadas com `apt` (Mint, Pop!_OS, Zorin, elementary).
 
 ```bash
-git clone https://github.com/mpjsilva/transcreve-zap
+git clone -b linux https://github.com/mpjsilva/transcreve-zap
 cd transcreve-zap
 ./instalar.sh            # opções: --resumo-local --sem-resumo --modelo-melhor --nao-iniciar
 ```
 
-- Instala pelo `dnf` (pede `sudo` uma vez): `nodejs npm git gcc-c++ cmake make curl`
-  e, com `--resumo-local`, `llama-cpp` (o `llama-server` do próprio Fedora).
-- O Fedora não traz o `whisper-cli`, então o instalador compila o whisper.cpp
-  num commit fixo (conferido) dentro de `ferramentas/whisper`. Leva 1 a 3 minutos.
-- Os modelos têm o SHA-256 conferido, como no Windows.
+- Pede `sudo` uma vez para instalar o que faltar:
+  - Fedora: `nodejs npm git gcc-c++ cmake make curl` (+ `llama-cpp` com `--resumo-local`)
+  - Ubuntu/Debian: `git build-essential cmake curl ca-certificates xz-utils`
+- Se o Node.js do sistema for anterior ao 20 (Ubuntu 22.04/24.04), baixa um Node
+  portátil em `ferramentas/node`, com SHA-256 conferido, como no Windows.
+- O whisper.cpp é compilado num commit fixo (conferido) em `ferramentas/whisper`.
+  Com `--resumo-local` no Ubuntu, o llama.cpp também é compilado (no Fedora vem do `dnf`).
+- Os modelos têm o SHA-256 conferido.
 - Roda como serviço systemd do usuário (`transcreve-zap.service`), que inicia no login.
   Para rodar sem ninguém logado: `sudo loginctl enable-linger $USER`.
+  Sem systemd (container, WSL), o `./iniciar.sh` abre com `nohup`.
 - `./iniciar.sh`, `./parar.sh`, `./desinstalar.sh` substituem os `.vbs`/`.ps1`.
   Log em `dados/transcreve-zap.log` ou `journalctl --user -u transcreve-zap`.
 
