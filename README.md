@@ -58,7 +58,7 @@ Um só instalador para as duas famílias:
 - **Ubuntu 22.04+ / Debian 12+** e derivadas com `apt` (Mint, Pop!_OS, Zorin, elementary).
 
 ```bash
-git clone -b linux https://github.com/mpjsilva/transcreve-zap
+git clone https://github.com/mpjsilva/transcreve-zap
 cd transcreve-zap
 ./instalar.sh            # opções: --resumo-local --sem-resumo --modelo-melhor --nao-iniciar
 ```
